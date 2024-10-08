@@ -8,10 +8,12 @@ interface IGetAccessTokenParams {
 }
 
 interface IUserInfoResponse {
-  id: string
+  googleId: string
   email: string,
   verifiedEmail: boolean
-  imageUrl: string
+  firstName: string
+  lastName: string
+  avatarUrl: string
 }
 
 export class GoogleApis {
@@ -35,9 +37,7 @@ export class GoogleApis {
     }
   );
 
-    return {
-      accessToken: data.access_token
-    };
+    return  data.access_token;
   }
 
   static async getUserInfo(accessToken: string): Promise<IUserInfoResponse> {
@@ -52,9 +52,11 @@ export class GoogleApis {
 
     return {
       email: data.email,
-      id: data.id,
+      googleId: data.id,
       verifiedEmail: data.verified_email,
-      imageUrl: data.picture,
+      firstName: data.given_name,
+      lastName: data.family_name,
+      avatarUrl: data.picture,
     };
   }
 

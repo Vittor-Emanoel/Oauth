@@ -12,6 +12,7 @@ interface IAuthContextValue {
   signedIn: boolean;
   signInWithGoogle: () => void;
   signOut: () => void;
+  signIn: (accessToken: string) => void;
 }
 
 const AuthContext = createContext({} as IAuthContextValue);
@@ -21,26 +22,37 @@ export function useAuth() {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [signedIn, setSignedIn] = useState(false);
+  const [signedIn, setSignedIn] = useState(() => {
+    const storedAccessToken = localStorage.getItem('oauthestudos:token');
+
+    return !!storedAccessToken;
+  });
 
   const signInWithGoogle = useCallback(() => {
-    // setSignedIn(true);
-    // toast.info('Entrar com o Google!');
     const baseUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
 
     const options = qs.stringify({
       client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
       redirect_uri: 'http://localhost:5173/callbacks/google',
       response_type: 'code',
-      scope: 'email profile'
+      scope: 'email profile',
     });
 
     window.location.href = `${baseUrl}?${options}`;
   }, []);
 
+
+  const signIn = useCallback((accessToken: string) => {
+    localStorage.setItem('oauthestudos:token', accessToken);
+
+    setSignedIn(true);
+  }, []);
+
   const signOut = useCallback(() => {
+    localStorage.removeItem('oauthestudos:token');
+
     setSignedIn(false);
-    toast.info('Sair!');
+    toast.info('Desconectou!');
   }, []);
 
   const value = useMemo<IAuthContextValue>(
@@ -48,8 +60,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signedIn,
       signInWithGoogle,
       signOut,
+      signIn,
     }),
-    [signedIn, signInWithGoogle, signOut],
+    [signedIn, signInWithGoogle, signOut, signIn],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

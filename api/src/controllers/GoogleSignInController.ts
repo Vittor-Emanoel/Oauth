@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
+import { prismaClient } from '../lib/prismaClient';
 import { GoogleApis } from '../services/GoogleApis';
 
 const schema = z.object({
@@ -9,35 +10,54 @@ const schema = z.object({
 
 export class GoogleSignInController {
   static handle = async (request: FastifyRequest, reply: FastifyReply) => {
-    const result = schema.safeParse(request.body);
+    console.log(request.user);
 
-    if (!result.success) {
-      return reply.status(400).send({
-        error: result.error.issues,
+    try {
+      const result = schema.safeParse(request.body);
+
+      if (!result.success) {
+        return reply.status(400).send({
+          error: result.error.issues,
+        });
+      }
+
+      const { code } = result.data;
+
+      //Step 1.
+      const googleAccessToken = await GoogleApis.getAccessToken({
+        code,
+        redirectUri: 'http://localhost:5173/callbacks/google',
       });
-    }
 
-    const {code} = result.data;
+      //Step 2.
+      const { verifiedEmail, ...userinfo } =
+        await GoogleApis.getUserInfo(googleAccessToken);
 
-    //Step 1.
-    const {accessToken} = await GoogleApis.getAccessToken({
-      code,
-      redirectUri: 'http://localhost:5173/callbacks/google'
-    });
+      //revoke token
+      await GoogleApis.revokeAccessToken(googleAccessToken);
 
-    //Step 2.
-    const userinfo = await GoogleApis.getUserInfo(accessToken);
+      if (!verifiedEmail) {
+        return reply.status(401).send({
+          error: 'Google account is not verified.',
+        });
+      }
 
-    //revoke token
-    await GoogleApis.revokeAccessToken(accessToken);
-
-    if(!userinfo.verifiedEmail) {
-      return reply.status(401).send({
-        error: 'Google account is not verified.'
+      const user = await prismaClient.user.upsert({
+        where: {
+          email: userinfo.email,
+        },
+        create: userinfo,
+        update: {
+          googleId: userinfo.googleId,
+        },
       });
+
+      const accessToken = await reply.jwtSign({ sub: user.id });
+
+
+      return reply.code(200).send({ accessToken });
+    } catch (error) {
+      console.log(error, 'deu ruim aqui!');
     }
-
-
-    return reply.code(200).send({ google: true });
   };
 }
